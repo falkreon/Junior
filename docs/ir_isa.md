@@ -7,7 +7,7 @@ This may be interpreted directly as a virtual machine, or converted into platfor
 
 * i8, i16, i32, i64 - integer types
 * f16, f32, f64 - floating point types
-* addr - address. This is an alias for some integer type i8 or larger which is equivalent to the target's address type
+* word - This is an alias for some integer type i8 or larger which is equivalent to the target's general and address register size. On most modern machines, including single-board computers, this will be i64. On Arduino boards this may be i8 or i32. If the general register size and the address register size is different, an implementation MAY decide to statically determine from usage whether an LVT entry is used for addresses or data, and assign a different underlying type accordingly. Otherwise, the chosen size MUST be the target's address size.
 
 
 floating point types are always signed
@@ -105,6 +105,16 @@ x = x + y
 ```
 Opcodes: 1 byte
 
+Data Type Bits:
+	0x0 int8
+	0x1 int16
+	0x2 int32
+	0x3 int64
+	0x4 float16
+	0x5 float32
+	0x6 float64
+	0x7 word
+
 Operand Types: 4 bits
     0x0 register
     0x1 immediate value
@@ -125,10 +135,9 @@ Operand Types: 4 bits
 3-operand instruction: 1 byte opcode, 4bit-4bit operand types, 8/8/32 operand bits.
 The type of the first operand and the destination are always the same
 
- byte    0          1             2             3          4          5          6          7          8
-[opcode   ][type|type][destination ][firstoperand][secondoperand                                        ]
+[opcode   ][datatype|oper2type][destination ][firstoperand][secondoperand                             ]
 
 No-dest or convert instruction: 1 byte opcode, 4bit-4bit operand types, 1 byte first operand, 5 bytes second operand
- byte    0          1             2             3          4          5          6          7          8
-[opcode   ][type|type][firstoperand][secondoperand                                                      ]
+ byte    0          1             2             3          4          5          6          7
+[opcode   ][type|type][firstoperand][secondoperand                                           ]
 ```
