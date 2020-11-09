@@ -68,6 +68,14 @@ public class Stack {
 		pushInt8(h);
 	}
 	
+	public void pushWord(long value) throws StackOverflowError {
+		pushInt64(value);
+	}
+	
+	public void pushFloat16(short value) throws StackOverflowError {
+		pushInt16(value);
+	}
+	
 	public void pushFloat32(float value) throws StackOverflowError {
 		pushInt32(Float.floatToIntBits(value));
 	}
@@ -127,9 +135,9 @@ public class Stack {
 		stackFrames.push(frame);
 	}
 	
-	public void pushStackFrame(String methodName, int int64Count, int float64Count, int int32Count, int float32Count, int int16Count, int float16Count, int int8Count) {
+	public void pushStackFrame(String methodName, int wordCount, int int64Count, int float64Count, int int32Count, int float32Count, int int16Count, int float16Count, int int8Count) {
 		StackFrame frame = new StackFrame(methodName);
-		frame.reserve(int64Count, float64Count, int32Count, float32Count, int16Count, float16Count, int8Count);
+		frame.reserve(wordCount, int64Count, float64Count, int32Count, float32Count, int16Count, float16Count, int8Count);
 		pushStackFrame(frame);
 	}
 	
@@ -141,11 +149,9 @@ public class Stack {
 		int int32Count   = (int) ((lvtInfo >>> 32) & 0xFF);
 		int float64Count = (int) ((lvtInfo >>> 40) & 0xFF);
 		int int64Count   = (int) ((lvtInfo >>> 48) & 0xFF);
-		//High byte / lvtInfo>>>56 is reserved for future use and MUST be zero.
-		int exoticDataCount = (int) ((lvtInfo >>> 56) & 0xFF);
-		if (exoticDataCount!=0) throw new VMException("This program uses an exotic data type which isn't compatible with the EsoVM interpreter.");
+		int wordCount    = (int) ((lvtInfo >>> 56) & 0xFF);
 		
-		pushStackFrame(methodName, int64Count, float64Count, int32Count, float32Count, int16Count, float16Count, int8Count);
+		pushStackFrame(methodName, wordCount, int64Count, float64Count, int32Count, float32Count, int16Count, float16Count, int8Count);
 	}
 	
 	public StackFrame popStackFrame() {

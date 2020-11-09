@@ -44,8 +44,7 @@ public class VMThread {
 	//Operand2Types: Operand 2 can often be any of several options - a register, memory address, something from the constant pool, an immediate value, etc.
 	public static final int OPERAND_REGISTER  = 0x0;
 	public static final int OPERAND_IMMEDIATE = 0x1;
-	public static final int OPERAND_ADDRESS_TO_CONSTANT  = 0x2;
-	public static final int OPERAND_CONSTANT = 0x3;
+	public static final int OPERAND_CONSTANT  = 0x2;
 	//0x0..0x3 are always valid for non-ignored operands, but the following are memory types, and are only valid for load and store:
 	/* Loading this will load the value at address `register+operand2` */
 	public static final int OPERAND_REGISTER_ADDRESS_PLUS_IMMEDIATE_OFFSET = 0x4;
@@ -114,14 +113,25 @@ public class VMThread {
 		checkBounds();
 		int opcode = program[programCounter];
 		switch(opcode) {
-		case OPCODE_LOAD:
+		case OPCODE_LOAD: {
 			int instructionType = program[programCounter+1] >>> 4;
-			int operand2Type = program[programCounter+1] & 0xFF;
+			int operand2Type = program[programCounter+1] & 0x0F;
 			int lvtIndex = program[programCounter+3];
 			load(instructionType, lvtIndex, operand2Type, operand2Standard());
-		break;
-		
-		
+			break;
+		}
+		case OPCODE_STORE: {
+			int instructionType = program[programCounter+1] >>> 4;
+			int operand2Type = program[programCounter+1] & 0x0F;
+			int lvtIndex = program[programCounter+3];
+			store(instructionType, lvtIndex, operand2Type, operand2Standard());
+			break;
+		}
+		case OPCODE_PUSH: {
+			int instructionType = program[programCounter+1] >>> 4;
+			int lvtIndex = program[programCounter+3];
+			push(instructionType, lvtIndex);
+		}
 		default:
 			throw new VMException("Unknown opcode 0x"+Integer.toHexString(opcode));
 		}
@@ -133,18 +143,94 @@ public class VMThread {
 		if (programCounter<0 || programCounter>=program.length) throw new VMException();
 	}
 	
-	protected void checkCompatibility(int type1, int type2) throws VMException {
-		//TODO: Implement. Basically, if 2 is a "concrete type", as in a register type, it MUST equal 1
-	}
 	
 	public void load(int instructionType, int lvtIndex, int operand2Type, int operand2) throws VMException {
 		switch(instructionType) {
-		//long value = loadValueMemoryOk(operand2Type, operand2());
 		case DATA_INT8:
 			stack.currentStackFrame().putInt8(lvtIndex, loadInt8(operand2Type, operand2, true));
+			break;
 		case DATA_INT16:
 			stack.currentStackFrame().putInt16(lvtIndex, loadInt16(operand2Type, operand2, true));
-		break;
+			break;
+		case DATA_INT32:
+			stack.currentStackFrame().putInt32(lvtIndex, loadInt32(operand2Type, operand2, true));
+			break;
+		case DATA_INT64:
+			stack.currentStackFrame().putInt64(lvtIndex, loadInt64(operand2Type, operand2, true));
+			break;
+		case DATA_FLOAT16:
+			stack.currentStackFrame().putFloat16(lvtIndex, loadFloat16(operand2Type, operand2, true));
+			break;
+		case DATA_FLOAT32:
+			stack.currentStackFrame().putFloat32(lvtIndex, loadFloat32(operand2Type, operand2, true));
+			break;
+		case DATA_FLOAT64:
+			stack.currentStackFrame().putFloat64(lvtIndex, loadFloat64(operand2Type, operand2, true));
+			break;
+		case DATA_WORD:
+			stack.currentStackFrame().putWord(lvtIndex, loadWord(operand2Type, operand2, true));
+		default:
+			throw new VMException("Invalid instruction data type 0x"+Integer.toHexString(instructionType));
+		}
+	}
+	
+	public void store(int instructionType, int lvtIndex, int operand2Type, int operand2) throws VMException {
+		switch(instructionType) {
+		case DATA_INT8:
+			storeInt8(operand2Type, operand2, stack.currentStackFrame().getInt8(lvtIndex));
+			break;
+		case DATA_INT16:
+			storeInt16(operand2Type, operand2, stack.currentStackFrame().getInt16(lvtIndex));
+			break;
+		case DATA_INT32:
+			storeInt32(operand2Type, operand2, stack.currentStackFrame().getInt32(lvtIndex));
+			break;
+		case DATA_INT64:
+			storeInt64(operand2Type, operand2, stack.currentStackFrame().getInt64(lvtIndex));
+			break;
+		case DATA_FLOAT16:
+			storeFloat16(operand2Type, operand2, stack.currentStackFrame().getFloat16(lvtIndex));
+			break;
+		case DATA_FLOAT32:
+			storeFloat32(operand2Type, operand2, stack.currentStackFrame().getFloat32(lvtIndex));
+			break;
+		case DATA_FLOAT64:
+			storeFloat64(operand2Type, operand2, stack.currentStackFrame().getFloat64(lvtIndex));
+			break;
+		case DATA_WORD:
+			storeWord(operand2Type, operand2, stack.currentStackFrame().getWord(lvtIndex));
+			break;
+		default:
+			throw new VMException("Invalid instruction data type 0x"+Integer.toHexString(instructionType));
+		}
+	}
+	
+	public void push(int instructionType, int lvtIndex) throws VMException {
+		switch(instructionType) {
+		case DATA_INT8:
+			stack.pushInt8(stack.currentStackFrame().getInt8(lvtIndex));
+			break;
+		case DATA_INT16:
+			stack.pushInt16(stack.currentStackFrame().getInt16(lvtIndex));
+			break;
+		case DATA_INT32:
+			stack.pushInt32(stack.currentStackFrame().getInt32(lvtIndex));
+			break;
+		case DATA_INT64:
+			stack.pushInt64(stack.currentStackFrame().getInt64(lvtIndex));
+			break;
+		case DATA_FLOAT16:
+			stack.pushFloat16(stack.currentStackFrame().getFloat16(lvtIndex));
+			break;
+		case DATA_FLOAT32:
+			stack.pushFloat32(stack.currentStackFrame().getFloat32(lvtIndex));
+			break;
+		case DATA_FLOAT64:
+			stack.pushFloat64(stack.currentStackFrame().getFloat64(lvtIndex));
+			break;
+		case DATA_WORD:
+			stack.pushWord(stack.currentStackFrame().getWord(lvtIndex));
+			break;
 		default:
 			throw new VMException("Invalid instruction data type 0x"+Integer.toHexString(instructionType));
 		}
@@ -156,8 +242,22 @@ public class VMThread {
 			return stack.currentStackFrame().getInt8(operand2);
 		case OPERAND_IMMEDIATE:
 			return (byte)operand2;
-		case OPERAND_ADDRESS_TO_CONSTANT:
-			return (byte)operand2; //TODO: Add constant pool base address
+		case OPERAND_CONSTANT:
+			throw new VMException("Not yet implemented");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public void storeInt8(int operand2Type, int operand2, byte value) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			stack.currentStackFrame().putInt8(operand2, value);
+			break;
+		case OPERAND_IMMEDIATE:
+			throw new VMException("Can't store to immediate value");
+		case OPERAND_CONSTANT:
+			throw new VMException("Can't store sto constant value");
 		default:
 			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
 		}
@@ -169,8 +269,184 @@ public class VMThread {
 			return stack.currentStackFrame().getInt16(operand2);
 		case OPERAND_IMMEDIATE:
 			return (short)operand2;
-		case OPERAND_ADDRESS_TO_CONSTANT:
-			return (short)operand2; //TODO: Add constant pool base address
+		case OPERAND_CONSTANT:
+			throw new VMException("Not yet implemented");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public void storeInt16(int operand2Type, int operand2, short value) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			stack.currentStackFrame().putInt16(operand2, value);
+			break;
+		case OPERAND_IMMEDIATE:
+			throw new VMException("Can't store to immediate value");
+		case OPERAND_CONSTANT:
+			throw new VMException("Can't store sto constant value");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public int loadInt32(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			return stack.currentStackFrame().getInt32(operand2);
+		case OPERAND_IMMEDIATE:
+			return operand2;
+		case OPERAND_CONSTANT:
+			throw new VMException("Not yet implemented");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public void storeInt32(int operand2Type, int operand2, int value) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			stack.currentStackFrame().putInt32(operand2, value);
+			break;
+		case OPERAND_IMMEDIATE:
+			throw new VMException("Can't store to immediate value");
+		case OPERAND_CONSTANT:
+			throw new VMException("Can't store sto constant value");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public long loadInt64(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			return stack.currentStackFrame().getInt64(operand2);
+		case OPERAND_IMMEDIATE:
+			return operand2;
+		case OPERAND_CONSTANT:
+			throw new VMException("Not yet implemented");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public void storeInt64(int operand2Type, int operand2, long value) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			stack.currentStackFrame().putInt64(operand2, value);
+			break;
+		case OPERAND_IMMEDIATE:
+			throw new VMException("Can't store to immediate value");
+		case OPERAND_CONSTANT:
+			throw new VMException("Can't store sto constant value");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public long loadWord(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			return stack.currentStackFrame().getWord(operand2);
+		case OPERAND_IMMEDIATE:
+			return operand2;
+		case OPERAND_CONSTANT:
+			throw new VMException("Not yet implemented");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public void storeWord(int operand2Type, int operand2, long value) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			stack.currentStackFrame().putWord(operand2, value);
+			break;
+		case OPERAND_IMMEDIATE:
+			throw new VMException("Can't store to immediate value");
+		case OPERAND_CONSTANT:
+			throw new VMException("Can't store sto constant value");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public short loadFloat16(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			return stack.currentStackFrame().getFloat16(operand2);
+		case OPERAND_IMMEDIATE:
+			return (short)operand2;
+		case OPERAND_CONSTANT:
+			throw new VMException("Not yet implemented");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public void storeFloat16(int operand2Type, int operand2, short value) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			stack.currentStackFrame().putFloat16(operand2, value);
+			break;
+		case OPERAND_IMMEDIATE:
+			throw new VMException("Can't store to immediate value");
+		case OPERAND_CONSTANT:
+			throw new VMException("Can't store sto constant value");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public float loadFloat32(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			return stack.currentStackFrame().getFloat32(operand2);
+		case OPERAND_IMMEDIATE:
+			return Float.intBitsToFloat(operand2);
+		case OPERAND_CONSTANT:
+			throw new VMException("Not yet implemented");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public void storeFloat32(int operand2Type, int operand2, float value) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			stack.currentStackFrame().putFloat32(operand2, value);
+			break;
+		case OPERAND_IMMEDIATE:
+			throw new VMException("Can't store to immediate value");
+		case OPERAND_CONSTANT:
+			throw new VMException("Can't store sto constant value");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public double loadFloat64(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			return stack.currentStackFrame().getFloat64(operand2);
+		case OPERAND_IMMEDIATE:
+			return (double) Float.intBitsToFloat(operand2);
+		case OPERAND_CONSTANT:
+			throw new VMException("Not yet implemented");
+		default:
+			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
+		}
+	}
+	
+	public void storeFloat64(int operand2Type, int operand2, double value) throws VMException {
+		switch(operand2Type) {
+		case OPERAND_REGISTER:
+			stack.currentStackFrame().putFloat64(operand2, value);
+			break;
+		case OPERAND_IMMEDIATE:
+			throw new VMException("Can't store to immediate value");
+		case OPERAND_CONSTANT:
+			throw new VMException("Can't store sto constant value");
 		default:
 			throw new VMException("Invalid operandType 0x"+Integer.toHexString(operand2Type));
 		}

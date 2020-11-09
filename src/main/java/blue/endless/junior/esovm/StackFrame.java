@@ -9,6 +9,7 @@ public class StackFrame {
 	short[] int16;
 	short[] float16;
 	byte[] int8;
+	long[] word;
 	
 	public StackFrame() {
 		this.methodName = "unknown";
@@ -18,7 +19,8 @@ public class StackFrame {
 		this.methodName = methodName;
 	}
 	
-	public void reserve(int int64Count, int float64Count, int int32Count, int float32Count, int int16Count, int float16Count, int int8Count) {
+	public void reserve(int wordCount, int int64Count, int float64Count, int int32Count, int float32Count, int int16Count, int float16Count, int int8Count) {
+		if (wordCount   >0) word    = new long[wordCount];
 		if (int64Count  >0) int64   = new long[int64Count];
 		if (float64Count>0) float64 = new double[float64Count];
 		if (int32Count  >0) int32   = new int[int32Count];
@@ -46,6 +48,11 @@ public class StackFrame {
 	public long getInt64(int index) throws VMStackException {
 		checkInt64(index);
 		return int64[index];
+	}
+	
+	public long getWord(int index) throws VMStackException {
+		checkWord(index);
+		return word[index];
 	}
 	
 	public short getFloat16(int index) throws VMStackException {
@@ -83,6 +90,11 @@ public class StackFrame {
 		int64[index] = value;
 	}
 	
+	public void putWord(int index, long value) throws VMStackException {
+		checkWord(index);
+		word[index] = value;
+	}
+	
 	public void putFloat16(int index, short value) throws VMStackException {
 		checkFloat16(index);
 		float16[index] = value;
@@ -116,6 +128,11 @@ public class StackFrame {
 	protected void checkInt64(int index) throws VMStackException {
 		if (int64==null) throw new VMStackException("An instruction attempted to access an int64 in the LVT, but none were declared.");
 		if (index<0 || index>=int64.length) throw new VMStackException("An instruction attempted to access an int64 in the LVT with invalid index "+index);
+	}
+	
+	protected void checkWord(int index) throws VMStackException {
+		if (word==null) throw new VMStackException("An instruction attempted to access a word in the LVT, but none were declared.");
+		if (index<0 || index>=word.length) throw new VMStackException("An instruction attempted to access a word in the LVT with invalid index "+index);
 	}
 	
 	protected void checkFloat16(int index) throws VMStackException {
