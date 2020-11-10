@@ -22,13 +22,13 @@ public class Stack {
 		branchPointer = stack.length;
 	}
 	
-	public void pushInt8(int value) throws StackOverflowError {
+	public void pushInt8(int value) throws VMStackException {
 		stackPointer--;
 		rangeCheck();
 		stack[stackPointer] = (byte)value;
 	}
 	
-	public void pushInt16(int value) throws StackOverflowError {
+	public void pushInt16(int value) throws VMStackException {
 		int hi = (value >>> 8) & 0xFF;
 		int lo = value & 0xFF;
 		
@@ -36,7 +36,7 @@ public class Stack {
 		pushInt8(lo);
 	}
 	
-	public void pushInt32(int value) throws StackOverflowError {
+	public void pushInt32(int value) throws VMStackException {
 		int a = (value >>>24) & 0xFF;
 		int b = (value >>>16) & 0xFF;
 		int c = (value >>> 8) & 0xFF;
@@ -48,7 +48,7 @@ public class Stack {
 		pushInt8(d);
 	}
 	
-	public void pushInt64(long value) throws StackOverflowError {
+	public void pushInt64(long value) throws VMStackException {
 		int a = (int) ((value >>>56) & 0xFF);
 		int b = (int) ((value >>>48) & 0xFF);
 		int c = (int) ((value >>>40) & 0xFF);
@@ -68,36 +68,36 @@ public class Stack {
 		pushInt8(h);
 	}
 	
-	public void pushWord(long value) throws StackOverflowError {
+	public void pushWord(long value) throws VMStackException {
 		pushInt64(value);
 	}
 	
-	public void pushFloat16(short value) throws StackOverflowError {
+	public void pushFloat16(short value) throws VMStackException {
 		pushInt16(value);
 	}
 	
-	public void pushFloat32(float value) throws StackOverflowError {
+	public void pushFloat32(float value) throws VMStackException {
 		pushInt32(Float.floatToIntBits(value));
 	}
 	
-	public void pushFloat64(double value) throws StackOverflowError {
+	public void pushFloat64(double value) throws VMStackException {
 		pushInt64(Double.doubleToLongBits(value));
 	}
 	
-	public int popInt8() throws StackOverflowError {
+	public byte popInt8() throws VMStackException {
 		rangeCheck();
-		int result = stack[stackPointer];
+		byte result = stack[stackPointer];
 		stackPointer++;
 		return result;
 	}
 	
-	public int popInt16() throws StackOverflowError {
+	public short popInt16() throws VMStackException {
 		int lo = popInt8();
 		int hi = popInt8();
-		return (hi << 8) | lo;
+		return (short) ((hi << 8) | lo);
 	}
 	
-	public int popInt32() throws StackOverflowError {
+	public int popInt32() throws VMStackException {
 		int d = popInt8();
 		int c = popInt8();
 		int b = popInt8();
@@ -106,7 +106,7 @@ public class Stack {
 		return (a<<24) | (b<<16) | (c<<8) | d;
 	}
 	
-	public long popInt64() throws StackOverflowError {
+	public long popInt64() throws VMStackException {
 		int h = popInt8();
 		int g = popInt8();
 		int f = popInt8();
@@ -119,11 +119,15 @@ public class Stack {
 		return (a<<56) | (b<<48) | (c<<40) | (d<<32) | (e<<24) | (f<<16) | (g<<8) | h;
 	}
 	
-	public float popFloat32() throws StackOverflowError {
+	public short popFloat16() throws VMStackException {
+		return popInt16();
+	}
+	
+	public float popFloat32() throws VMStackException {
 		return Float.intBitsToFloat(popInt32());
 	}
 	
-	public double popFloat64() throws StackOverflowError {
+	public double popFloat64() throws VMStackException {
 		return Double.longBitsToDouble(popInt64());
 	}
 	
@@ -159,8 +163,8 @@ public class Stack {
 	}
 	
 	/** Makes sure we're ready to read the value *at* the stack pointer. Throws a StackOverflow if we're not. */
-	protected void rangeCheck() throws StackOverflowError {
-		if (stackPointer<0) throw new StackOverflowError("The EsoVM stack has overflowed (data was pushed but there's no room for it)");
-		if (stackPointer>=stack.length) throw new StackOverflowError("The EsoVM stack has underflowed (data was popped but the stack is empty)"); 
+	protected void rangeCheck() throws VMStackException {
+		if (stackPointer<0) throw new VMStackException("The EsoVM stack has overflowed (data was pushed but there's no room for it)");
+		if (stackPointer>=stack.length) throw new VMStackException("The EsoVM stack has underflowed (data was popped but the stack is empty)"); 
 	}
 }

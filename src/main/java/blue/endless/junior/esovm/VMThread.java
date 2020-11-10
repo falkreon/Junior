@@ -88,20 +88,46 @@ public class VMThread {
 	public static final int OPCODE_MUL = 0x22; //Standard
 	public static final int OPCODE_DIV = 0x23; //Standard
 	public static final int OPCIDE_MOD = 0x24; //Standard
+	public static final int OPCODE_SHL = 0x25; //Standard - only valid for int types
+	public static final int OPCODE_SHR = 0x26; //Standard - only valid for int types
+	public static final int OPCODE_ASR = 0x27; //Standard - only valid for int types - sign-extending "Arithmetic Shift Right"
 	
 	public static final int OPCODE_CONVERT = 0x30; //Convert
 	
-	public static final int OPCODE_CALL    = 0x40; //Simple - operand 1 is ignored, operand 2 is an offset (or label) into the data segment for a pascal string containing the method's unique identifier
+	public static final int OPCODE_CALL    = 0x40; //Simple - operand 1 is ignored, operand 2 is an index in the constant-string pool of a method to call.
+	/*
+	 * Method calls in esovm on the jvm will first look for a junior method matching the signature. If none are found, then java is reflexively asked for the method, and
+	 * based on the first method found matching the string as a fully-qualified binary name, arguments will be popped off the stack in reverse order and a conversion
+	 * attempted to the method's parameter types. The ability to call "external" Java methods can be disabled from the Interpreter.
+	 */
+	
+	public static final int OPCODE_TEST    = 0x41; //Simple - operand 1 is a register, everything else is ignored.
+	public static final int OPCODE_JUMP    = 0x42; //Simple - operand 1 is ignored, jumps to address at operand 2 unconditionally.
+	public static final int OPCODE_CJUMP   = 0x43; //Simple - operand 1 is a condition code, jumps to address at operand 2 if the condition is met
+	/*
+	 * Conditions:
+	 *   0x00: "Equal", "Zero", "==0" (ZF==1)
+	 *   0x01: "Not-Equal", "Nonzero", "!=0" (ZF==0)
+	 *   0x02: "Less", "Not Greater or Equal", "<" (ZF==0 and SF!=CF)
+	 *   0x03: "Greater", "Not Less or Equal", "<" (ZF==0 and SF==CF)
+	 *   0x04: "Negative", "Less than Zero", "<0" (SF==1)
+	 *   0x05: "Not-Negative", "Greater or Equal to Zero", ">=0" (SF==0)
+	 */
+	
+	public static final int OPCODE_CLOAD   = 0x44; //Standard - operand 1 is a condition code, operand 2 is the element to load
+	public static final int OPCODE_CSTORE  = 0x45; //Standard - operand 1 is a condition code, operand 2 is the data destination, what is normally destination is the source register
+	
 	
 	public static final int OPCODE_INTERRUPT = 0xF0; //Simple - operand 1 is ignored, operand 2 is the index into the interrupt vector table (the interrupt to trigger).
 	public static final int OPCODE_OUT       = 0xF1; //Simple - operand 1 is the value to write, operand 2 is the port index to write to
 	public static final int OPCODE_IN        = 0xF2; //Simple - operand 1 is the destination, operand 2 is the port index to read from
 	
-	public static final int OPCODE_HALT      = 0xFF; //Simple - operand 1 is ignored and MUST be zeroes, operand 2 is zero for a normal halt, or an offset (or label) into the constant pool for a pascal string containing an error code.
+	public static final int OPCODE_HALT      = 0xFF; //Simple - operand 1 is ignored and MUST be zeroes, operand 2 is zero for a normal halt, or an index into the constant-string pool for an error description.
 	
 	protected Stack stack = new Stack(65535);
 	protected byte[] program;
 	protected int programCounter;
+	protected boolean active = true;
 	
 	public VMThread(byte[] program, int address) {
 		stack.clear();
@@ -110,41 +136,68 @@ public class VMThread {
 	}
 	
 	public void cycle() throws VMException {
-		checkBounds();
-		int opcode = program[programCounter];
-		switch(opcode) {
-		case OPCODE_LOAD: {
-			int instructionType = program[programCounter+1] >>> 4;
-			int operand2Type = program[programCounter+1] & 0x0F;
-			int lvtIndex = program[programCounter+3];
-			load(instructionType, lvtIndex, operand2Type, operand2Standard());
-			break;
+		if (!active) return;
+		try {
+			checkBounds();
+			int opcode = program[programCounter];
+			switch(opcode) {
+			case OPCODE_LOAD: {
+				int instructionType = program[programCounter+1] >>> 4;
+				int operand2Type = program[programCounter+1] & 0x0F;
+				int lvtIndex = program[programCounter+3];
+				load(instructionType, lvtIndex, operand2Type, operand2Standard());
+				break;
+			}
+			case OPCODE_STORE: {
+				int instructionType = program[programCounter+1] >>> 4;
+				int operand2Type = program[programCounter+1] & 0x0F;
+				int lvtIndex = program[programCounter+3];
+				store(instructionType, lvtIndex, operand2Type, operand2Standard());
+				break;
+			}
+			case OPCODE_PUSH: {
+				int instructionType = program[programCounter+1] >>> 4;
+				int lvtIndex = program[programCounter+3];
+				push(instructionType, lvtIndex);
+				break;
+			}
+			
+			//TODO: Rest of instructions
+			
+			case OPCODE_HALT: {
+				active = false;
+				break;
+			}
+			default:
+				throw new VMException("Unknown opcode 0x"+Integer.toHexString(opcode));
+			}
+			//TODO: Execute
+			programCounter += 8;
+		} catch (VMException ex) {
+			active = false;
+			throw ex;
 		}
-		case OPCODE_STORE: {
-			int instructionType = program[programCounter+1] >>> 4;
-			int operand2Type = program[programCounter+1] & 0x0F;
-			int lvtIndex = program[programCounter+3];
-			store(instructionType, lvtIndex, operand2Type, operand2Standard());
-			break;
-		}
-		case OPCODE_PUSH: {
-			int instructionType = program[programCounter+1] >>> 4;
-			int lvtIndex = program[programCounter+3];
-			push(instructionType, lvtIndex);
-		}
-		default:
-			throw new VMException("Unknown opcode 0x"+Integer.toHexString(opcode));
-		}
-		//TODO: Execute
-		programCounter += 8;
+	}
+	
+	/**
+	 * Returns true if this thread is still running. In other words, true is returned if cycle() should continue be called to
+	 * dispatch more instructions. False will be returned if the machine hits either a natural or abnormal halt.
+	 */
+	public boolean isActive() {
+		return active;
 	}
 	
 	protected void checkBounds() throws VMException {
 		if (programCounter<0 || programCounter>=program.length) throw new VMException();
 	}
 	
+	/*
+	 * You may notice that what follows here could be described as "crimes".
+	 * 
+	 * Some day, when we re-implement esovm in an esolang, we'll have primitive-type function specialization and can avoid this. All of this.
+	 */
 	
-	public void load(int instructionType, int lvtIndex, int operand2Type, int operand2) throws VMException {
+	protected void load(int instructionType, int lvtIndex, int operand2Type, int operand2) throws VMException {
 		switch(instructionType) {
 		case DATA_INT8:
 			stack.currentStackFrame().putInt8(lvtIndex, loadInt8(operand2Type, operand2, true));
@@ -174,7 +227,7 @@ public class VMThread {
 		}
 	}
 	
-	public void store(int instructionType, int lvtIndex, int operand2Type, int operand2) throws VMException {
+	protected void store(int instructionType, int lvtIndex, int operand2Type, int operand2) throws VMException {
 		switch(instructionType) {
 		case DATA_INT8:
 			storeInt8(operand2Type, operand2, stack.currentStackFrame().getInt8(lvtIndex));
@@ -205,7 +258,7 @@ public class VMThread {
 		}
 	}
 	
-	public void push(int instructionType, int lvtIndex) throws VMException {
+	protected void push(int instructionType, int lvtIndex) throws VMException {
 		switch(instructionType) {
 		case DATA_INT8:
 			stack.pushInt8(stack.currentStackFrame().getInt8(lvtIndex));
@@ -236,7 +289,36 @@ public class VMThread {
 		}
 	}
 	
-	public byte loadInt8(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+	protected void pop(int instructionType, int lvtIndex) throws VMException {
+		switch(instructionType) {
+		case DATA_INT8:
+			stack.currentStackFrame().putInt8(lvtIndex, stack.popInt8());
+			break;
+		case DATA_INT16:
+			stack.currentStackFrame().putInt16(lvtIndex, stack.popInt16());
+			break;
+		case DATA_INT32:
+			stack.currentStackFrame().putInt32(lvtIndex, stack.popInt32());
+			break;
+		case DATA_INT64:
+			stack.currentStackFrame().putInt64(lvtIndex, stack.popInt64());
+			break;
+		case DATA_FLOAT16:
+			stack.currentStackFrame().putFloat16(lvtIndex, stack.popFloat16());
+			break;
+		case DATA_FLOAT32:
+			stack.currentStackFrame().putFloat32(lvtIndex, stack.popFloat32());
+			break;
+		case DATA_FLOAT64:
+			stack.currentStackFrame().putFloat64(lvtIndex, stack.popFloat64());
+			break;
+		case DATA_WORD:
+			stack.currentStackFrame().putWord(lvtIndex, stack.popInt64());
+			break;
+		}
+	}
+	
+	protected byte loadInt8(int operand2Type, int operand2, boolean allowMemory) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			return stack.currentStackFrame().getInt8(operand2);
@@ -249,7 +331,7 @@ public class VMThread {
 		}
 	}
 	
-	public void storeInt8(int operand2Type, int operand2, byte value) throws VMException {
+	protected void storeInt8(int operand2Type, int operand2, byte value) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			stack.currentStackFrame().putInt8(operand2, value);
@@ -263,7 +345,7 @@ public class VMThread {
 		}
 	}
 	
-	public short loadInt16(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+	protected short loadInt16(int operand2Type, int operand2, boolean allowMemory) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			return stack.currentStackFrame().getInt16(operand2);
@@ -276,7 +358,7 @@ public class VMThread {
 		}
 	}
 	
-	public void storeInt16(int operand2Type, int operand2, short value) throws VMException {
+	protected void storeInt16(int operand2Type, int operand2, short value) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			stack.currentStackFrame().putInt16(operand2, value);
@@ -290,7 +372,7 @@ public class VMThread {
 		}
 	}
 	
-	public int loadInt32(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+	protected int loadInt32(int operand2Type, int operand2, boolean allowMemory) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			return stack.currentStackFrame().getInt32(operand2);
@@ -303,7 +385,7 @@ public class VMThread {
 		}
 	}
 	
-	public void storeInt32(int operand2Type, int operand2, int value) throws VMException {
+	protected void storeInt32(int operand2Type, int operand2, int value) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			stack.currentStackFrame().putInt32(operand2, value);
@@ -317,7 +399,7 @@ public class VMThread {
 		}
 	}
 	
-	public long loadInt64(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+	protected long loadInt64(int operand2Type, int operand2, boolean allowMemory) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			return stack.currentStackFrame().getInt64(operand2);
@@ -330,7 +412,7 @@ public class VMThread {
 		}
 	}
 	
-	public void storeInt64(int operand2Type, int operand2, long value) throws VMException {
+	protected void storeInt64(int operand2Type, int operand2, long value) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			stack.currentStackFrame().putInt64(operand2, value);
@@ -344,7 +426,7 @@ public class VMThread {
 		}
 	}
 	
-	public long loadWord(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+	protected long loadWord(int operand2Type, int operand2, boolean allowMemory) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			return stack.currentStackFrame().getWord(operand2);
@@ -357,7 +439,7 @@ public class VMThread {
 		}
 	}
 	
-	public void storeWord(int operand2Type, int operand2, long value) throws VMException {
+	protected void storeWord(int operand2Type, int operand2, long value) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			stack.currentStackFrame().putWord(operand2, value);
@@ -371,7 +453,7 @@ public class VMThread {
 		}
 	}
 	
-	public short loadFloat16(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+	protected short loadFloat16(int operand2Type, int operand2, boolean allowMemory) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			return stack.currentStackFrame().getFloat16(operand2);
@@ -384,7 +466,7 @@ public class VMThread {
 		}
 	}
 	
-	public void storeFloat16(int operand2Type, int operand2, short value) throws VMException {
+	protected void storeFloat16(int operand2Type, int operand2, short value) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			stack.currentStackFrame().putFloat16(operand2, value);
@@ -398,7 +480,7 @@ public class VMThread {
 		}
 	}
 	
-	public float loadFloat32(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+	protected float loadFloat32(int operand2Type, int operand2, boolean allowMemory) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			return stack.currentStackFrame().getFloat32(operand2);
@@ -411,7 +493,7 @@ public class VMThread {
 		}
 	}
 	
-	public void storeFloat32(int operand2Type, int operand2, float value) throws VMException {
+	protected void storeFloat32(int operand2Type, int operand2, float value) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			stack.currentStackFrame().putFloat32(operand2, value);
@@ -425,7 +507,7 @@ public class VMThread {
 		}
 	}
 	
-	public double loadFloat64(int operand2Type, int operand2, boolean allowMemory) throws VMException {
+	protected double loadFloat64(int operand2Type, int operand2, boolean allowMemory) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			return stack.currentStackFrame().getFloat64(operand2);
@@ -438,7 +520,7 @@ public class VMThread {
 		}
 	}
 	
-	public void storeFloat64(int operand2Type, int operand2, double value) throws VMException {
+	protected void storeFloat64(int operand2Type, int operand2, double value) throws VMException {
 		switch(operand2Type) {
 		case OPERAND_REGISTER:
 			stack.currentStackFrame().putFloat64(operand2, value);
